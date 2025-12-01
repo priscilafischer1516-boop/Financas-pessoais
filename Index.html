@@ -1,0 +1,467 @@
+App de controle financeiro pessoal
+
+Você quer algo simples, bonito e funcional. Abaixo está um app web com visual limpo, campos exigidos, totais (saldo, entradas, saídas), filtro mensal, acesso por link e opção de compartilhar. Salva os dados no navegador (localStorage), então você pode usar já, e publicar facilmente para acessar por URL.
+
+---
+
+Recursos e fluxo
+
+• Campos: valor, categoria, data, descrição, tipo (entrada/saída).
+• Resumo: saldo total, total de entradas e total de saídas.
+• Visualização mensal: filtro por mês/ano com navegação rápida.
+• Compartilhar: botão que usa Web Share API e link da página.
+• Persistência local: dados ficam salvos no dispositivo via localStorage.
+• Acessibilidade: rótulos, contraste, foco visível, navegação por teclado.
+
+
+---
+
+Código completo (HTML + CSS + JS)
+
+Crie um arquivo index.html com o conteúdo abaixo e publique. É uma página única pronta para uso.
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Finanças Pessoais</title>
+  <meta name="description" content="App simples de controle financeiro pessoal" />
+  <style>
+    :root {
+      --bg: #0f172a;        /* slate-900 */
+      --card: #111827;      /* gray-900 */
+      --muted: #94a3b8;     /* slate-400 */
+      --text: #e5e7eb;      /* gray-200 */
+      --accent: #10b981;    /* emerald-500 */
+      --danger: #ef4444;    /* red-500 */
+      --warning: #f59e0b;   /* amber-500 */
+      --border: #1f2937;    /* gray-800 */
+      --focus: #22d3ee;     /* cyan-400 */
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      background: linear-gradient(180deg, #0b1220, var(--bg));
+      color: var(--text);
+    }
+    header, main { max-width: 960px; margin: 0 auto; padding: 20px; }
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    h1 { font-size: 1.4rem; margin: 0; }
+    .actions { display: flex; gap: 10px; }
+    button, select, input[type="date"], input[type="text"], input[type="number"] {
+      background: var(--card);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px 12px;
+      border-radius: 10px;
+      outline: none;
+    }
+    button {
+      cursor: pointer; border: 1px solid var(--border);
+      transition: transform 0.06s ease, border-color 0.2s ease, background 0.2s ease;
+    }
+    button:hover { transform: translateY(-1px); border-color: #334155; }
+    button.primary { background: #0b2c24; border-color: #115e44; }
+    button.primary:hover { background: #0e3a2e; }
+    button.danger { background: #2a0f12; border-color: #7f1d1d; color: #fecaca; }
+    .grid {
+      display: grid; gap: 16px;
+      grid-template-columns: 1fr;
+    }
+    @media (min-width: 760px) {
+      .grid { grid-template-columns: 2fr 3fr; }
+    }
+    .card {
+      background: rgba(17, 24, 39, 0.7);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 16px;
+      backdrop-filter: blur(8px);
+    }
+    .summary {
+      display: grid; gap: 12px; grid-template-columns: 1fr 1fr 1fr;
+    }
+    .summary .item {
+      background: #0e1627; border: 1px solid #1e293b; border-radius: 12px; padding: 12px;
+    }
+    .summary .label { color: var(--muted); font-size: 0.9rem; }
+    .summary .value { font-size: 1.2rem; font-weight: 600; }
+    .summary .saldo .value { color: var(--accent); }
+    .summary .entradas .value { color: #34d399; }
+    .summary .saidas .value { color: var(--danger); }
+    form .row { display: grid; gap: 10px; grid-template-columns: 1fr; }
+    @media (min-width: 760px) {
+      form .row { grid-template-columns: 1fr 1fr; }
+    }
+    label { display: block; font-size: 0.88rem; color: var(--muted); margin-bottom: 6px; }
+    .field { margin-bottom: 10px; }
+    .type-toggle { display: flex; gap: 8px; }
+    .type-toggle button { flex: 1; }
+    .type-toggle .in { color: #a7f3d0; border-color: #115e44; background: #0b2c24; }
+    .type-toggle .out { color: #fecaca; border-color: #7f1d1d; background: #2a0f12; }
+    .filters { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+    .list { margin-top: 8px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border-bottom: 1px solid var(--border); padding: 10px; text-align: left; }
+    th { color: var(--muted); font-weight: 500; }
+    tr:hover td { background: rgba(2, 6, 23, 0.35); }
+    .amount-in { color: #34d399; }
+    .amount-out { color: var(--danger); }
+    .empty { color: var(--muted); padding: 14px; text-align: center; }
+    .kbd {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 0.85rem; background: #0b1220; border: 1px solid #1e293b; border-radius: 8px; padding: 6px 8px;
+    }
+    :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+    footer { color: var(--muted); font-size: 0.85rem; padding: 20px; text-align: center; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1 aria-label="Finanças Pessoais">Finanças</h1>
+    <div class="actions">
+      <button id="shareBtn" aria-label="Compartilhar app">Compartilhar</button>
+      <button id="exportBtn" aria-label="Exportar dados">Exportar CSV</button>
+      <button id="clearBtn" class="danger" aria-label="Apagar tudo">Apagar</button>
+    </div>
+  </header>
+
+  <main class="grid">
+    <section class="card" aria-labelledby="resumo-title">
+      <h2 id="resumo-title" style="margin-top:0;">Resumo</h2>
+      <div class="summary">
+        <div class="item saldo">
+          <div class="label">Saldo</div>
+          <div class="value" id="saldo">R$ 0,00</div>
+        </div>
+        <div class="item entradas">
+          <div class="label">Entradas</div>
+          <div class="value" id="entradas">R$ 0,00</div>
+        </div>
+        <div class="item saídas">
+          <div class="label">Saídas</div>
+          <div class="value" id="saidas">R$ 0,00</div>
+        </div>
+      </div>
+
+      <div class="filters" style="margin-top:14px;">
+        <button id="prevMonth" aria-label="Mês anterior">◀ Mês</button>
+        <div class="kbd" id="monthLabel" aria-live="polite">—</div>
+        <button id="nextMonth" aria-label="Próximo mês">Mês ▶</button>
+        <input type="month" id="monthPicker" aria-label="Selecionar mês" />
+        <button id="resetMonth" aria-label="Ver todos">Todos</button>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="add-title">
+      <h2 id="add-title" style="margin-top:0;">Adicionar lançamento</h2>
+      <form id="form">
+        <div class="field">
+          <label for="tipo">Tipo</label>
+          <div class="type-toggle" role="group" aria-label="Tipo de lançamento">
+            <button type="button" id="btnEntrada" class="in" aria-pressed="true">Entrada</button>
+            <button type="button" id="btnSaida" class="out" aria-pressed="false">Saída</button>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="field">
+            <label for="valor">Valor</label>
+            <input id="valor" type="number" step="0.01" min="0" placeholder="Ex.: 1500,00" required />
+          </div>
+          <div class="field">
+            <label for="categoria">Categoria</label>
+            <input id="categoria" type="text" placeholder="Ex.: Salário, Mercado" required />
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="field">
+            <label for="data">Data</label>
+            <input id="data" type="date" required />
+          </div>
+          <div class="field">
+            <label for="descricao">Descrição</label>
+            <input id="descricao" type="text" placeholder="Detalhes (opcional)" />
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px;">
+          <button type="submit" class="primary">Salvar</button>
+          <button type="reset">Limpar</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="card" aria-labelledby="list-title" style="grid-column: 1 / -1;">
+      <h2 id="list-title" style="margin-top:0;">Lançamentos</h2>
+      <div class="list">
+        <table aria-describedby="monthLabel">
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Descrição</th>
+              <th>Categoria</th>
+              <th>Tipo</th>
+              <th>Valor</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody">
+            <tr><td colspan="6" class="empty">Sem lançamentos</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    Dica: use o filtro de mês para ver seus resultados mensais. Os dados ficam salvos neste dispositivo.
+  </footer>
+
+  <script>
+    const storageKey = 'financas_lancamentos_v1';
+    let lancamentos = JSON.parse(localStorage.getItem(storageKey) || '[]');
+    let currentFilter = { year: null, month: null }; // 1-12
+
+    const formatBRL = (n) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const parseNumber = (v) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : 0;
+    };
+
+    // UI elements
+    const saldoEl = document.getElementById('saldo');
+    const entradasEl = document.getElementById('entradas');
+    const saidasEl = document.getElementById('saidas');
+    const monthLabelEl = document.getElementById('monthLabel');
+    const monthPickerEl = document.getElementById('monthPicker');
+    const tableBodyEl = document.getElementById('tableBody');
+
+    const btnEntrada = document.getElementById('btnEntrada');
+    const btnSaida = document.getElementById('btnSaida');
+
+    const shareBtn = document.getElementById('shareBtn');
+    const exportBtn = document.getElementById('exportBtn');
+    const clearBtn = document.getElementById('clearBtn');
+
+    const form = document.getElementById('form');
+    const inputValor = document.getElementById('valor');
+    const inputCategoria = document.getElementById('categoria');
+    const inputData = document.getElementById('data');
+    const inputDescricao = document.getElementById('descricao');
+
+    // Tipo toggle
+    let tipoAtual = 'entrada';
+    const updateTipoUI = () => {
+      btnEntrada.setAttribute('aria-pressed', String(tipoAtual === 'entrada'));
+      btnSaida.setAttribute('aria-pressed', String(tipoAtual === 'saida'));
+    };
+    btnEntrada.addEventListener('click', () => { tipoAtual = 'entrada'; updateTipoUI(); });
+    btnSaida.addEventListener('click', () => { tipoAtual = 'saida'; updateTipoUI(); });
+
+    // Month helpers
+    const now = new Date();
+    const pad2 = (n) => String(n).padStart(2, '0');
+    const setMonthLabel = () => {
+      if (currentFilter.year && currentFilter.month) {
+        monthLabelEl.textContent = `${pad2(currentFilter.month)}/${currentFilter.year}`;
+        monthPickerEl.value = `${currentFilter.year}-${pad2(currentFilter.month)}`;
+      } else {
+        monthLabelEl.textContent = 'Todos';
+        monthPickerEl.value = '';
+      }
+    };
+    const applyMonth = (y, m) => {
+      currentFilter.year = y; currentFilter.month = m;
+      setMonthLabel(); render();
+    };
+    document.getElementById('prevMonth').addEventListener('click', () => {
+      const y = currentFilter.year ?? now.getFullYear();
+      const m = currentFilter.month ?? (now.getMonth() + 1);
+      const d = new Date(y, m - 2, 1);
+      applyMonth(d.getFullYear(), d.getMonth() + 1);
+    });
+    document.getElementById('nextMonth').addEventListener('click', () => {
+      const y = currentFilter.year ?? now.getFullYear();
+      const m = currentFilter.month ?? (now.getMonth() + 1);
+      const d = new Date(y, m, 1);
+      applyMonth(d.getFullYear(), d.getMonth() + 1);
+    });
+    document.getElementById('resetMonth').addEventListener('click', () => {
+      currentFilter = { year: null, month: null };
+      setMonthLabel(); render();
+    });
+    monthPickerEl.addEventListener('change', (e) => {
+      const val = e.target.value; // yyyy-mm
+      if (!val) { currentFilter = { year: null, month: null }; setMonthLabel(); render(); return; }
+      const [y, m] = val.split('-').map(Number);
+      applyMonth(y, m);
+    });
+
+    // CRUD
+    const save = () => localStorage.setItem(storageKey, JSON.stringify(lancamentos));
+
+    const addLancamento = (l) => {
+      lancamentos.push(l);
+      save(); render();
+    };
+
+    const removeLancamento = (id) => {
+      lancamentos = lancamentos.filter(x => x.id !== id);
+      save(); render();
+    };
+
+    // Filtered data
+    const filtered = () => {
+      if (!currentFilter.year || !currentFilter.month) return [...lancamentos];
+      return lancamentos.filter(l => {
+        const dt = new Date(l.data);
+        return dt.getFullYear() === currentFilter.year && (dt.getMonth() + 1) === currentFilter.month;
+      });
+    };
+
+    // Render
+    const renderSummary = () => {
+      const data = filtered();
+      const totalIn = data.filter(l => l.tipo === 'entrada').reduce((s, l) => s + l.valor, 0);
+      const totalOut = data.filter(l => l.tipo === 'saida').reduce((s, l) => s + l.valor, 0);
+      const saldo = totalIn - totalOut;
+      entradasEl.textContent = formatBRL(totalIn);
+      saidasEl.textContent = formatBRL(totalOut);
+      saldoEl.textContent = formatBRL(saldo);
+    };
+
+    const renderTable = () => {
+      const data = filtered().sort((a, b) => new Date(b.data) - new Date(a.data));
+      tableBodyEl.innerHTML = '';
+      if (data.length === 0) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 6; td.className = 'empty'; td.textContent = 'Sem lançamentos';
+        tr.appendChild(td); tableBodyEl.appendChild(tr); return;
+      }
+      for (const l of data) {
+        const tr = document.createElement('tr');
+        const tdData = document.createElement('td');
+        tdData.textContent = new Date(l.data).toLocaleDateString('pt-BR');
+
+        const tdDesc = document.createElement('td'); tdDesc.textContent = l.descricao || '—';
+        const tdCat = document.createElement('td'); tdCat.textContent = l.categoria;
+
+        const tdTipo = document.createElement('td'); tdTipo.textContent = l.tipo === 'entrada' ? 'Entrada' : 'Saída';
+
+        const tdVal = document.createElement('td');
+        tdVal.textContent = formatBRL(l.valor);
+        tdVal.className = l.tipo === 'entrada' ? 'amount-in' : 'amount-out';
+
+        const tdActions = document.createElement('td');
+        const del = document.createElement('button');
+        del.className = 'danger';
+        del.textContent = 'Excluir';
+        del.setAttribute('aria-label', 'Excluir lançamento');
+        del.addEventListener('click', () => removeLancamento(l.id));
+        tdActions.appendChild(del);
+
+        tr.appendChild(tdData);
+        tr.appendChild(tdDesc);
+        tr.appendChild(tdCat);
+        tr.appendChild(tdTipo);
+        tr.appendChild(tdVal);
+        tr.appendChild(tdActions);
+        tableBodyEl.appendChild(tr);
+      }
+    };
+
+    const render = () => {
+      renderSummary();
+      renderTable();
+    };
+
+    // Form submit
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const valor = parseNumber(inputValor.value);
+      const categoria = inputCategoria.value.trim();
+      const data = inputData.value;
+      if (!valor || !categoria || !data) return;
+
+      const descricao = inputDescricao.value.trim();
+
+      const novo = {
+        id: crypto.randomUUID(),
+        tipo: tipoAtual,
+        valor,
+        categoria,
+        data,
+        descricao
+      };
+      addLancamento(novo);
+      form.reset();
+      tipoAtual = 'entrada';
+      updateTipoUI();
+    });
+
+    // Share
+    shareBtn.addEventListener('click', async () => {
+      const shareData = {
+        title: document.title,
+        text: 'Meu app de finanças pessoais',
+        url: location.href
+      };
+      try {
+        if (navigator.share) {
+          await navigator.share(shareData);
+        } else {
+          await navigator.clipboard.writeText(shareData.url);
+          alert('Link copiado para a área de transferência.');
+        }
+      } catch (err) {
+        console.log(err);
+        alert('Não foi possível compartilhar agora.');
+      }
+    });
+
+    // Export CSV
+    const toCSV = (rows) => {
+      const headers = ['id','tipo','valor','categoria','data','descricao'];
+      const escape = (s) => `"${String(s).replace(/"/g,'""')}"`;
+      const head = headers.join(',');
+      const lines = rows.map(r => headers.map(h => escape(r[h] ?? '')).join(','));
+      return [head, ...lines].join('\n');
+    };
+    exportBtn.addEventListener('click', () => {
+      const csv = toCSV(lancamentos);
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'financas.csv';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    });
+
+    // Clear all
+    clearBtn.addEventListener('click', () => {
+      const ok = confirm('Tem certeza que deseja apagar todos os dados?');
+      if (!ok) return;
+      lancamentos = [];
+      save(); render();
+    });
+
+    // Init
+    (function init() {
+      updateTipoUI();
+      setMonthLabel();
+      render();
+    })();
+  </script>
+</body>
+</html>
+
